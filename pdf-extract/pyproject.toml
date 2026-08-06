@@ -1,0 +1,32 @@
+[project]
+name = "paper-extract"
+version = "0.1.0"
+description = "Extract figures / tables / captions / formulas + LaTeX from literature PDFs"
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    # 与 PDF-Extract-Kit requirements-cpu.txt 对齐（项目自带的依赖矩阵）
+    "PyMuPDF>=1.24",
+    "opencv-python",   # 版本由 paddleocr 2.7.3 拉低到 4.6.x，不要自己 pin 高版本
+    "numpy>=1.26",
+    "huggingface_hub>=0.24",
+    "doclayout-yolo==0.0.2b1",   # PyPI 上 0.0.2 不存在
+    "ultralytics>=8.2.85",
+    "paddleocr==2.7.3",
+    "paddlepaddle>=3.0",
+    "unimernet>=0.2.1",
+    "struct-eqtable",
+    "omegaconf",
+    "matplotlib",
+    "Pillow",
+    "rich>=13",
+]
+
+[project.scripts]
+paper-extract = "paper_extract.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

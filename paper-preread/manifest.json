@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "skill_name": "paper-preread",
+  "modules": [
+    {"id": "背景", "index": 1, "filename": "背景.json", "heading": "背景", "char_limit": 1000},
+    {"id": "问题", "index": 2, "filename": "问题.json", "heading": "问题", "char_limit": 1500},
+    {"id": "结论", "index": 3, "filename": "结论.json", "heading": "结论", "char_limit": 1000},
+    {"id": "技术", "index": 4, "filename": "技术.json", "heading": "技术", "char_limit": 3000},
+    {"id": "实验", "index": 5, "filename": "实验.json", "heading": "实验", "char_limit": 3000},
+    {"id": "讨论", "index": 6, "filename": "讨论.json", "heading": "讨论", "char_limit": 2000}
+  ],
+  "score_dims": ["correctness", "clarity", "completeness"],
+  "trigger_rules": {
+    "balanced": {"description": "≥2 medium_or_low", "neg_min": 2, "low_min": null},
+    "strict": {"description": "≥2 low", "neg_min": null, "low_min": 2},
+    "conservative": {"description": "≥1 low", "neg_min": null, "low_min": 1}
+  },
+  "phase_contracts": {
+    "phase_2_outputs": [
+      "paper.pdf",
+      "paper.md",
+      "paper_meta.json",
+      "summary.json",
+      "paper_sections.json",
+      "paper_context.json",
+      "figures_alias.json",
+      "figures/",
+      "tables/",
+      "formulas/",
+      "meta.json",
+      "figs.json"
+    ],
+    "phase_3_schema": "_plan.json",
+    "phase_4_module_schema": "_modules/<module_id>.json"
+  },
+  "safe_io_rules": {
+    "max_ascii_doublequote_in_content_md": 0,
+    "forbid_raw_control_chars": true,
+    "atomic_write": true
+  },
+  "audience": "VLM-direction graduate student / engineer"
+}

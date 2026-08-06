@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+
+# Virtual envs
+venv/
+.venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models / large files (pdf-extract downloads via setup.sh)
+*.pt
+*.pth
+*.onnx
+*.bin
+
+# Editor
+.vscode/
+.idea/
+*.swp

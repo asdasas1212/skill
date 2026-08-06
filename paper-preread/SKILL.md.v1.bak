@@ -1,0 +1,401 @@
+---
+name: paper-preread
+description: 论文精读 + 飞书 wiki 子文档生成 + 4-agent 评分迭代 — 从 arxiv 论文到飞书精读文档端到端：双向验证 arxiv 编号、用 pdf-extract skill 切 PDF 原图（figure / table / caption / formula + LaTeX）、在飞书 wiki 父节点下建子文档并图文混排插入原图；最后用 4 个不同视角 agent（VLM新手 / CVPR审稿人 / VLN学生 / figure-auditor）对 6 模块（背景/问题/结论/技术/实验/讨论）按 balanced 规则（≥2 medium_or_low 触发）重写本地 _modules/<模块>.json，迭代直到通过（max_iter=2），最后一次性写飞书。强调"贴原图不写 native table"。适用场景：用户提供飞书 wiki 父节点 URL + 论文清单（带 arxiv 号），需要逐篇生成 VLM 视角白话精读文档并自评优化。
+requires:
+  pdf-extract_skill: ~/.claude/skills/pdf-extract
+  python3_system: true
+---
+
+# 论文精读 + 飞书文档生成 Skill
+
+## 概述（6 阶段）
+
+| # | Phase | 输入 | 输出/修改 |
+|---|---|---|---|
+| 1 | 论文身份验证 | arxiv_id | 候选 arxiv 列表 |
+| 2 | 论文内容抓取 | paper.pdf | paper.md + paper_meta.json + summary.json + figures/tables/formulas/ |
+| 3 | 内容路由 | paper.md + paper_meta.json + summary.json | `_plan.json` |
+| 4 | 精读内容撰写 | `_plan.json` + paper.md + figures/tables/formulas/ | 6 个 `_modules/<模块>.json` |
+| 5 | 本地 review loop | 6 个 `_modules/<模块>.json` | 同 6 个文件（触发项覆盖） |
+| 6 | 一次性写飞书 | 6 个全 pass 的 `_modules/<模块>.json` | 飞书子文档 + doc_id |
+
+## 触发条件
+
+用户提供：飞书 wiki 父节点 URL/node_token + 论文清单（带 arxiv 号）；或单篇 arxiv_id + 飞书父节点。
+
+## 环境依赖
+
+- **pdf-extract skill**（首选 figure/table/formula 抽取）：首次用跑 `~/.claude/skills/pdf-extract/scripts/setup.sh`（约 5–10 分钟，含模型下载）；之后每个 shell `source ~/.config/pdf-extract/config.sh`
+- **系统 python3 + pymupdf + pymupdf4llm**：Phase 2 用
+- **lark-cli**：Phase 6 用（详见 `lark-cli docs --help`）
+
+## 工作流程（6 阶段）
+
+### 1. 论文身份验证
+
+文档给的 arxiv 号经常错（30-50%），必须三向验证：
+
+```bash
+# OpenAlex 全文搜索
+curl -s "https://api.openalex.org/works?filter=default.search:<unique_short_phrase>&sort=cited_by_count:desc&per_page=1" | python3 -c "import sys,json; print(json.load(sys.stdin))"
+
+# ar5iv 标题验证
+curl -sL https://ar5iv.labs.arxiv.org/html/<arxiv_id> | grep -oE '<title>[^<]*</title>'
+
+# arxiv 主页验证（fallback）
+curl -sL https://arxiv.org/abs/<arxiv_id> | grep -oE 'citation_title" content="[^"]*"'
+```
+
+### 2. 论文内容抓取（4 步）
+
+```bash
+cd <out_dir>    # cwd 必须是这里（飞书 media-insert 只接受相对路径）
+
+# 2.1 下载 PDF
+python3 scripts/download_arxiv_pdf.py <arxiv_id> <out_dir>
+# → paper.pdf
+
+# 2.2 高清结构化抽取（figure/table/formula + caption OCR）
+source ~/.config/pdf-extract/config.sh
+paper-extract paper.pdf --out <out_dir>
+# → figures/ tables/ formulas/ captions/ + summary.json
+
+# 2.3 全文正文（pymupdf4llm，自动清页眉/页脚/arXiv ID/页码）
+python3 scripts/extract_pdf_text.py paper.pdf <out_dir>
+# → paper.md (正文) + paper_meta.json (sections 树)
+
+# 2.4 ar5iv 补充（caption 全文 + figure_id + spacer 标记）
+python3 scripts/parse_ar5iv.py <arxiv_id> <out_dir>
+# → meta.json + figs.json + imgs/
+```
+
+**数据来源对照**（**唯一脚本说明**，全部按此表查）：
+
+| 数据类型 | 来源脚本 | 输入 | 输出 |
+|---|---|---|---|
+| PDF 文件 | `download_arxiv_pdf.py` | arxiv_id | paper.pdf |
+| 全文正文（pymupdf4llm，有噪声） | `extract_pdf_text.py` | paper.pdf | paper.md |
+| Section 标题树 | `extract_pdf_text.py` | paper.pdf | paper_meta.json |
+| Title + Abstract | `parse_ar5iv.py` | arxiv_id | meta.json |
+| Figure caption + fig_id + spacer | `parse_ar5iv.py` | arxiv_id | figs.json |
+| **⭐ paper_sections.json（结构化主输入）** | `parse_ar5iv_extended.py` | arxiv_id | paper_sections.json |
+| **Figure 高清原图** | `paper-extract`（pdf-extract skill） | paper.pdf | figures/ |
+| **Table 高清原图** | `paper-extract` | paper.pdf | tables/ |
+| **公式 LaTeX** | `paper-extract`（可选） + parse_ar5iv_extended.py 的 `<math alttext>` | paper.pdf | formulas/_latex.json 等 |
+| Figure/Table caption OCR | `paper-extract` | paper.pdf | summary.json[] |
+
+**⭐ `paper_sections.json` 是 Phase 4/5 agent 的主输入**（不是 paper.md）：
+- 从 ar5iv HTML 解析的 sections + paragraphs + inline_equations + tables (caption + cell 矩阵)
+- 直接由 LaTeX 源渲染，**段落切分干净、公式 LaTeX 完整、表格 cell 真实**
+- pymupdf4llm 出的 paper.md 仅作 fallback（ar5iv 渲染失败时）
+- 跑命令：`python3 scripts/parse_ar5iv_extended.py <arxiv_id> <outdir>`
+
+**已知边界**：
+- `paper-extract`：borderless 表格（CVPR/学术论文）100% 检出；caption OCR 偶有错（用 ar5iv 交叉验证）。**默认 `--no-formulas`**（公式从 ar5iv 取，更快更准）；有 GPU 时检测到 CUDA 自动恢复公式识别 stage
+- `extract_pdf_text.py`：~95% 正文文字准确；公式（PDF 里是图片）拿不到——已被 paper_sections.json 取代；自动清 4 类 noise；清不掉的自定义 watermark 需手工加 regex 到 `is_noise()`
+- `parse_ar5iv_extended.py`：HTML 渲染版，**结构化提取**；ar5iv v2 未渲染时输出残缺 → fallback 到 paper.md
+
+**fallback**：保留 `scripts/extract_pdf_figures.py` + `extract_table_orig.py`（PyMuPDF caption-anchored crop），仅在 pdf-extract 不可用或漏检时用。
+
+### 3. 内容路由（使用本 skill 的 agent 自己做）
+
+**输入**：paper.md + paper_meta.json + summary.json
+**输出**：`<out_dir>/_plan.json`
+
+```json
+{
+  "paper_id": "2409.18839",
+  "modules": {
+    "背景": {
+      "sections": [{"title": "Introduction", "page": 2, "reason": "..."}],
+      "elements": [{"type": "figure", "id": "page001_figure_05", "reason": "..."}]
+    },
+    "问题": { "sections": [...], "elements": [...] },
+    "结论": { "sections": [...], "elements": [...] },
+    "技术": { "sections": [...], "elements": [...] },
+    "实验": { "sections": [...], "elements": [...] },
+    "讨论": { "sections": [...], "elements": [...] }
+  }
+}
+```
+
+**关键规则**：同一 element 可进多模块；每个模块至少 1 项；`reason` 必填。
+
+**Agent prompt 模板**：
+```
+你是论文精读编辑，专做**内容路由**。
+最终产物是一篇 VLM 视角白话精读文，6 个模块：背景 / 问题 / 结论 / 技术 / 实验 / 讨论。
+你的任务：决定每个 sections/elements 进哪个模块，让下游写模块的 agent 拿到对的料。
+
+# 先理解再路由
+1. **主读** `<out_dir>/paper_sections.json`（ar5iv HTML 提的 sections + paragraphs + inline_equations + tables 结构化数据）
+2. **fallback** 读 `<out_dir>/paper.md`（仅当 paper_sections.json 不可用或 ar5iv 渲染失败时）
+3. 读 `<out_dir>/paper_meta.json` 看 section 标题树和 PDF 页码
+4. 读 `<out_dir>/summary.json` 看所有 figure/table/formula 的 caption
+5. 用 Read 看 `figures/` `tables/` 里 PNG 实际内容（caption 可能 OCR 错）
+
+# 6 个模块的定位（**不要给空模块**）
+- **背景**：研究领域 + 大问题 + 这篇 paper 想做什么 —— 给"VLM 读者进入状态"用的 context
+- **问题**：现有方法的关键缺陷 + 这篇 paper 想填的具体 gap —— Figure 1（对比图）通常在这里
+- **结论**：一句话总结 + 关键数字 + 性能提升 —— result 曲线可贴这里
+- **技术**：整体架构 + 核心创新 + 关键技术细节 —— **架构图 + 公式 LaTeX 都进这里**
+- **实验**：数据集 + 评测 + 主结果 + ablation —— **table 原图都进这里**（不写 native table）
+- **讨论**：局限性 + 失败案例 + 未来工作 —— qualitative 例子图可贴这里
+
+# 路由原则
+1. **同一 element 可进多模块**：架构图同时进"技术"+"问题"（如果它展示痛点），
+   BLEU 对比图同时进"背景"+"结论"（如果它展示 baseline 弱）
+2. **每个模块至少 1 个 section 或 element**（不能空）
+3. **每个 assignment 写 1 句 reason**：说明为什么这个 section/element 属于这个模块
+4. **section 路由**：
+   - "Introduction" 通常给"背景"+"问题"
+   - "Method / Model / Architecture / Approach" 给"技术"
+   - "Experiments / Results / Ablation" 给"实验"
+   - "Conclusion" 同时给"结论"+"讨论"
+5. **element 路由**（根据 caption + 实际内容判断）：
+   - caption 含 "framework / architecture / model / overview" → 技术
+   - caption 含 "ablation / comparison / benchmark" → 实验
+   - caption 含 "example / qualitative / case study" → 讨论
+
+# 输出
+写 `<out_dir>/_plan.json`：
+{
+  "paper_id": "<arxiv_id>",
+  "modules": {
+    "<模块名>": {
+      "sections": [{"title": "...", "page": N, "reason": "..."}],
+      "elements": [{"type": "figure|table|formula", "id": "...", "reason": "..."}]
+    },
+    ...
+  }
+}
+
+# 自查（写完 _plan.json 后）
+1. 每个 module 有 sections 或 elements？
+2. 每个 assignment 有 reason？
+3. 同一 element 是否跨模块出现（合理）？
+4. 是否每张图/table 至少分配到一个 module？
+```
+
+**校验**：写完 _plan.json 后 agent 自查（每个 module 有 reason、无空模块、每张图/table 至少分配一次）。
+
+### 4. 精读内容撰写（6 agent 并行 → 6 个本地文件）
+
+**输入**：`_plan.json` + paper.md + figures/tables/formulas/
+**输出**：
+```
+<out_dir>/_modules/
+├── 背景.json
+├── 问题.json
+├── 结论.json
+├── 技术.json
+├── 实验.json
+└── 讨论.json
+```
+
+**做法**：用 Agent 工具并行 spawn 6 个 agent，每个写一个文件（无冲突、无合并）。
+
+**每个文件 schema**：
+```json
+{
+  "module_id": "<模块名>",
+  "content_md": "## ...\n\n![Figure N](figures/...)\n\n$$...$$",
+  "figure_refs": [{"id", "path", "caption"}],
+  "table_refs": [{"id", "path", "caption"}],
+  "formula_refs": [{"id", "latex"}],
+  "source_sections": ["Introduction"]
+}
+```
+
+**Agent prompt 模板**：
+```
+你是论文写作专家，专写【<模块>】。读者是 VLM 背景的研究生/工程师——
+他们懂 encoder-decoder、attention、VQA、captioning，但**不熟悉**这篇 paper 的子领域。
+
+# 任务
+不是把材料凑起来，而是先**理解**这篇 paper 在做什么、为什么这样做、解决了什么问题，
+再用读者熟悉的概念**重新写作**。输出是一段让 VLM 背景读者读完能 grasp 这篇 paper 的文字。
+
+# 喂料
+1. **主读** `<out_dir>/paper_sections.json` —— 从 sections 数组里挑出与本模块相关的章节和段落（paragraphs + inline_equations + tables.cells）
+2. **fallback** 读 `<out_dir>/paper.md` 全文 —— 仅当 paper_sections.json 不可用或你需要的细节没在 sections 里
+3. 读 `<out_dir>/_plan.json` 里 <模块> 的：
+   - sections: 你负责的章节（粗略指引范围）
+   - elements: 你要引用的图/表/公式（caption/latex/path）
+4. 用 Read 工具看 `figures/` `tables/` `formulas/` 里 PNG 的**实际内容**
+   （caption 可能 OCR 错，必须亲眼看）
+
+# 写作要求
+1. **先理解后写**：动笔前先在脑里跑一遍"这篇 paper 想说什么"
+2. **类比优先**：用 VLM 熟悉概念解释新概念
+   （例：把 DETR 类比成 "anchor-free 的 set prediction"；把 LoRA 类比成 "在原权重上训一个低秩残差"）
+3. **解释"为什么"**：每个方法选择都要说 motivation，不要只描述做了什么
+4. **不堆术语**：术语第一次出现时一句话解释，之后直接用
+5. **结构**：
+   - 引用块 `> ...` 解释图的核心思想
+   - callout 标核心痛点 / 反直觉发现
+   - 公式用 `$$...$$`（从 elements 的 latex 字段取，不贴公式图）
+   - 表贴原图 `![...](tables/...)` + caption_text，**绝不写 native table**
+
+# ⚠️ JSON 安全（避免后续 Phase 5/6 反复修文件）
+
+**content_md 中绝对不要用 ASCII 双引号 `"`。** 所有引号必须用全角「」或 “”。
+（直接复用 ascii 双引号会在 safe_write_json 或 json.load 时炸，重写文件反而更耗时 —— 历史已验证。）
+
+**Write 工具写完 JSON 后立刻验证：**
+```bash
+python3 -c "import json; d=json.load(open('<out>/_modules/<模块>.json')); print('OK')"
+```
+只回 `OK` 才算任务完成；不 OK 就修一遍 content_md 把 `"` 换成 「」/“”，**不要**用反斜杠转义（那会让 markdown 渲染失效）。
+
+# 输出
+写到 `<out_dir>/_modules/<模块>.json`：
+{
+  "module_id": "<模块>",
+  "content_md": "<你写的 markdown>",
+  "figure_refs": [{"id", "path", "caption"}],
+  "table_refs":  [{"id", "path", "caption"}],
+  "formula_refs": [{"id", "latex"}],
+  "source_sections": ["<你实际参考的 sections>"]
+}
+figure_refs / table_refs / formula_refs 只列你**实际在 content_md 里用了**的。
+```
+
+**校验**：
+```bash
+python3 scripts/collect_modules.py <out_dir>    # exit 0 全齐 / exit 1 有缺
+python3 scripts/safe_io.py <out_dir>/_modules/*.json --max-quotes 0   # 全 exit 0 才行
+```
+
+### 5. 本地 review loop（不动飞书，只改 _modules/<模块>.json）
+
+**输入 / 修改数据**：6 个 `_modules/<模块>.json`（Phase 4 产物；触发项覆盖）
+
+**判断 pass / 不合格**：
+- **pass** = panel 评分后无触发项（balanced：≥2 medium_or_low 才触发；0 触发即 pass）
+- **不合格** = 有触发项
+
+**迭代次数**（`max_iter=2` 默认）：
+- Round 0：初次评分。**pass 则不迭代，直接进 Phase 6**
+- Round 1：不合格时，重写触发项 → 重评分。pass 则停
+- Round 2：仍不合格时，再重写 → 重评分。**无论结果都停**
+
+**做法**（使用本 skill 的 agent 跑）：
+1. Round 0：spawn **1 个 panel-of-4 agent**（同时输出 4 视角评分，避免 4 个独立 agent 各自的 wall clock）→ `python3 scripts/review_loop.py <scores.json> --rule balanced` 聚合
+2. 无触发 → pass，直接进 Phase 6
+3. 有触发 → `format_optimization_prompt()` 生成 prompt → spawn agent **覆盖整个** `_modules/<触发模块>.json`（不是只覆盖 content_md，要保住 figure_refs / table_refs / formula_refs 与 content_md 中 `![]()` 实际引用一致）
+4. 终止：pass / `max_iter=2` / 人工叫停
+
+**4 视角 panel-of-4**（同一个 agent 内部并行思考 4 视角）：
+
+| # | 视角 | 关注 |
+|---|---|---|
+| A | VLM 方向新手 | clarity（白话是否够易懂） |
+| B | CVPR/NeurIPS 审稿人 | correctness（技术细节、引用、数字） |
+| C | VLN 领域学生 | completeness + depth |
+| D | figure-auditor | 视觉错配（每个 PNG 是否真对应 caption） |
+
+**为什么 panel-of-4 比 4 个独立 agent 好**：
+- 4 个独立 agent 各自 5-10 min → wall clock = max，最长一个拖到 10 min
+- 1 个 panel 内并行思考 4 视角 → ~5 min wall clock（5-10× 提速）
+
+**panel agent 输出 schema**（与 4-agent 兼容；`review_loop.py` 接受 list or single）：
+
+```json
+{
+  "perspective": "panel",
+  "module_scores": {
+    "<模块>": {
+      "correctness": "high" | "medium" | "low",
+      "clarity": "high" | "medium" | "low",
+      "completeness": "high" | "medium" | "low",
+      "comments": {
+        "correctness": "（视角 B + D 综合）",
+        "clarity": "（视角 A 主评）",
+        "completeness": "（视角 C 主评）"
+      }
+    },
+    ...
+  }
+}
+```
+
+如果未来想回退到 4 个独立 agent，spawn 4 个分别填 `perspective="vlm_novice"/"cvpr_reviewer"/...`，output 一起传给 `review_loop.py --scores-json <merged>.json`。
+
+**agent 输出 schema**：
+```json
+{
+  "perspective": "vlm_novice",
+  "module_scores": {
+    "<模块名>": {"correctness": "high|medium|low", "clarity": "...", "completeness": "...",
+                 "comments": {"correctness": "...", "clarity": "...", "completeness": "..."}}
+  }
+}
+```
+
+**输出**：全 pass 的 6 个 `_modules/<模块>.json`（文件还在原位）
+
+### 6. 一次性写飞书
+
+**输入**：6 个全 pass 的 `_modules/<模块>.json`
+**输出**：飞书子文档
+
+**做法**：
+- `cd <out_dir>`（cwd 必须是这里，飞书 media-insert 只接受相对路径）
+- 用 `lark-cli docs +create` 创建子文档（标题 + 第一模块背景）
+- 后续 5 个模块：每个模块先 `+media-insert` 图（如果有），再 `+update --command append --content` 加文字
+- 详见 `lark-cli docs --help`
+
+**输出数据**：飞书子文档 + doc_id
+
+## 关键命令速查
+
+```bash
+# Phase 1 验证
+curl -s "https://api.openalex.org/works?filter=default.search:<phrase>&per_page=1"
+curl -sL https://ar5iv.labs.arxiv.org/html/<id> | grep -oE '<title>[^<]*</title>'
+curl -sL https://arxiv.org/abs/<id> | grep -oE 'citation_title" content="[^"]*"'
+
+# Phase 6 飞书
+lark-cli --profile <profile> docs +create --content "..." --parent-token <token>
+lark-cli --profile <profile> docs +update --doc <id> --command append --content "..."
+lark-cli --profile <profile> docs +media-insert --doc <id> --file ./imgs/<name>.png --align center --width 720
+lark-cli --profile <profile> docs +fetch --doc <id> --scope keyword --keyword "Table"   # 查重复元素
+```
+
+## 踩过的坑
+
+### 1. **表格：贴原图不写 native table**
+凭记忆凑数据：列名错（加了**原表没有的列**如 SPL）、数字小数 vs 百分数（OSR=0.21 应是 21.4）、数据本身记错。
+**必须用 paper-extract 拿 table 原图（borderless 也能 100% 检出），或直接贴原图。**
+PyMuPDF `find_tables()` 不适用——只识别有边框表格；LaTeX 渲染的 PDF（CVPR/IEEE）无边框。
+
+### 2. **arxiv.org 外网图片抓取超时**
+`<img href="https://ar5iv..."/>` 飞书服务器抓 2MB 图超时。
+必须下载本地 + `media-insert --file`。
+
+### 3. **media-insert 只能插末尾**
+想图文混排只能：append 文字 → media-insert 图 → append 文字 → media-insert 图... 交替。
+
+### 4. **--file 路径只接受 cwd 相对路径**
+绝对路径 `/tmp/...` 报 `unsafe file path`。
+subprocess.run 必须传 `cwd=<out_dir>`。
+
+### 5. **page 索引 0 vs 1**
+- `fitz` 0-indexed（`doc[6]` = PDF 第 7 页）
+- `pymupdf4llm` 1-indexed
+调试时确认。
+
+## 脚本
+
+| 脚本 | 用途 |
+|---|---|
+| `scripts/download_arxiv_pdf.py` | Phase 2.1：arxiv_id → paper.pdf（UA + 重试 + 版本回退） |
+| `scripts/parse_ar5iv.py` | Phase 2.4：ar5iv HTML 解析 → meta.json + figs.json + imgs/ |
+| `scripts/extract_pdf_text.py` | Phase 2.3：pymupdf4llm → paper.md + paper_meta.json（含 is_noise 后处理） |
+| `scripts/extract_pdf_figures.py` | **fallback**：caption-anchored crop |
+| `scripts/extract_table_orig.py` | **fallback**：caption-anchored table crop |
+| `scripts/collect_modules.py` | Phase 4 校验：检查 6 个 `_modules/<模块>.json` 是否齐全 |
+| `scripts/review_loop.py` | Phase 5 评分聚合：4 agent 评分 + balanced/strict/conservative 触发规则 + 重写 prompt 生成 |
+
+外置 skill `~/.claude/skills/pdf-extract/` 提供 `paper-extract` CLI（Phase 2.2）。
