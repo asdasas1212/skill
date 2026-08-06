@@ -1,13 +1,6 @@
 ---
 name: pdf-extract
 description: 从文献 PDF 抽取 figures / tables / captions / formulas + LaTeX，基于自研 paper_extract Python package（doclayout-yolo + ultralytics + paddleocr + unimernet，**零 GitHub clone 依赖**）。模块化：layout / ocr / formula_det / formula_rec 四模块可独立调用。适用场景：用户提供 PDF，需要结构化元素抽取；或被 paper-preread 等 skill 复用。
-requires:
-  python: "3.10"
-  conda_manager: miniforge 或 miniconda
-  conda_env: pdf-extract-kit-1.0
-  pip_packages: [PyMuPDF, opencv-python, numpy, huggingface_hub, doclayout-yolo, ultralytics, paddleocr, paddlepaddle, unimernet, Pillow, rich]
-  models_hf_repo: opendatalab/PDF-Extract-Kit-1.0
-  network: huggingface.co + pypi（清华镜像可，国内推荐）
 ---
 
 # pdf-extract skill
@@ -16,28 +9,25 @@ requires:
 
 输入 PDF 路径，输出 `{figures, tables, captions, formulas, summary.json}` 五件套。
 
-## 安装（新机器一次性）
+## 安装（新机器一次性，后续复用）
 
 ```bash
-~/.claude/skills/pdf-extract/scripts/setup.sh
+npx github:asdasas1212/skill install
 ```
 
-setup.sh 会：
-1. 探测/装 miniforge（已有则跳过）
-2. 创建 conda env `pdf-extract-kit-1.0`
-3. `pip install -e <skill-dir>` 安装 paper_extract package（**所有依赖走 PyPI**，不 clone 任何 GitHub 仓）
-4. 预下载 ~800 MB 模型到 `~/.cache/paper-extract/models/`（从 HuggingFace）
-5. 写 `~/.config/pdf-extract/config.sh`
+安装器把可复用运行时放在 `~/.paper-preread/`，把模型放在
+`~/.paper-preread/models/`。重复安装 skill 只同步变化，不重建环境或重复下载模型。
+独立的 uv、Python 3.10、Python 包和模型均由这条命令自动准备，不要求用户预装或理解 Python 环境。
+未发布 npm 包或从源码运行时，执行本 skill 的 `scripts/setup.sh`，效果相同。
 
 ## 调用
 
 ```bash
-source ~/.config/pdf-extract/config.sh
-paper-extract <pdf> --out <dir>                 # 全套
-paper-extract <pdf> --out <dir> --no-formulas   # 跳过公式
-paper-extract <pdf> --out <dir> --no-ocr        # 跳过 OCR
-paper-extract <pdf> --out <dir> --layout-only   # 只要 bbox
-paper-extract <pdf> --out <dir> --no-figures    # 只要 table
+~/.local/bin/paper-preread extract <pdf> --out <dir>                 # 全套
+~/.local/bin/paper-preread extract <pdf> --out <dir> --no-formulas   # 跳过公式
+~/.local/bin/paper-preread extract <pdf> --out <dir> --no-ocr        # 跳过 OCR
+~/.local/bin/paper-preread extract <pdf> --out <dir> --layout-only   # 只要 bbox
+~/.local/bin/paper-preread extract <pdf> --out <dir> --no-figures    # 只要 table
 ```
 
 ## Python API（模块化）
@@ -68,10 +58,7 @@ export PAPER_EXTRACT_PY=/path/to/python    # 覆盖默认 python 路径
 
 ## 卸载
 
-```bash
-conda env remove -n pdf-extract-kit-1.0
-rm -rf ~/.cache/paper-extract ~/.config/pdf-extract
-```
+删除 `~/.paper-preread/` 可移除独立运行时与模型；删除前先确认该目录没有用户产物。
 
 ## 已知边界
 

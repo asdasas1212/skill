@@ -1,9 +1,6 @@
 ---
 name: paper-preread
-description: 论文精读 + 飞书 wiki 子文档生成 skill（v2）— 从 arxiv 论文到飞书精读文档端到端。v2 重构后流程：(1) 三向验证 arxiv_id → (2) PDF 抓 + 7 步结构化抽取（输出 paper_sections.json 结构化正文 + paper_context.json 共享摘要 + figures_alias.json 短名映射）→ (3) 1 个路由 agent 基于 paper_sections.json 写 _plan.json → (4) 6 个写作 agent 并行基于 paper_context.json 写 6 个 _modules/<模块>.json → (5) 1 个 panel-of-4 agent 基于 paper_context.json 评分 + 触发项覆盖重写 → (6) Phase 6 用 figures_alias.json 短名写飞书子文档。pymupdf4llm 的 paper.md 在 v2 中角色降级为 fallback。强调"贴原图不写 native table"。适用场景：用户提供飞书 wiki 父节点 URL + 论文清单（带 arxiv 号），逐篇生成 VLM 视角白话精读文档并自评优化，目标 20-30 min 跑完一篇。
-requires:
-  pdf-extract_skill: ~/.claude/skills/pdf-extract
-  python3_system: true
+description: 论文精读 + 飞书 wiki 子文档生成 skill（v2）— 从 arxiv 论文到飞书精读文档端到端。v2 重构后流程：(1) 三向验证 arxiv_id → (2) PDF 抓 + 7 步结构化抽取（输出 paper_sections.json 结构化正文 + paper_context.json 共享摘要 + figures_alias.json 短名映射）→ (3) 1 个路由 agent 基于 paper_sections.json 写 _plan.json → (4) 6 个写作 agent 并行基于 paper_context.json 写六个模块 JSON → (5) 1 个 panel-of-4 agent 基于 paper_context.json 评分 + 触发项覆盖重写 → (6) Phase 6 用 figures_alias.json 短名写飞书子文档。pymupdf4llm 的 paper.md 在 v2 中角色降级为 fallback。强调"贴原图不写 native table"。适用场景：用户提供飞书 wiki 父节点 URL + 论文清单（带 arxiv 号），逐篇生成 VLM 视角白话精读文档并自评优化，目标 20-30 min 跑完一篇。
 ---
 
 # 论文精读 + 飞书文档生成 Skill（v2）
@@ -55,9 +52,9 @@ requires:
 
 ## 环境依赖
 
-- **pdf-extract skill**（首选 figure/table 抽取）：首次用跑 `~/.claude/skills/pdf-extract/scripts/setup.sh`（约 5–10 分钟，含模型下载）；之后每个 shell `source ~/.config/pdf-extract/config.sh`
-- **系统 python3 + pymupdf + pymupdf4llm + html.parser**：Phase 2 用
-- **lark-cli**：Phase 6 用
+- **paper-preread CLI runtime**：首次运行 `npx github:asdasas1212/skill install`；发布 npm 后可改用 `npx paper-preread-cli install`。安装器自动准备独立的 uv、Python 3.10、Python 包和模型，用户不需要手工配置 Python。运行时与模型持久化在 `~/.paper-preread/`，skill 更新不会重复安装
+- **Python runtime**：由安装器统一管理 PyMuPDF、pymupdf4llm 与 PDF 抽取依赖；不要要求用户安装 Conda、虚拟环境或混用系统 Python
+- **lark-cli（可选）**：Phase 6 直接写飞书时使用；缺失时生成 `phase6_export.json`，后续安装后续跑
 
 ## 工作流程（6 阶段具体步骤）
 
@@ -74,38 +71,15 @@ curl -sL https://arxiv.org/abs/<arxiv_id> | grep -oE 'citation_title" content="[
 ### 2. 论文内容抓取（7 步）
 
 ```bash
-cd <out_dir>    # cwd 必须是这里（飞书 media-insert 只接受相对路径）
+# 七步都使用 ~/.paper-preread/venv，默认跳过公式识别以节省时间
+paper-preread prepare <arxiv_id> --out <out_dir>
 
-# 2.1 下载 PDF
-python3 scripts/download_arxiv_pdf.py <arxiv_id> <out_dir>
-# → paper.pdf
-
-# 2.2 高清结构化抽取（figure / table + caption OCR）
-# v2 默认 --no-formulas：公式从 paper_sections.json 取，省 UniMERNet 1-2 min
-source ~/.config/pdf-extract/config.sh
-paper-extract paper.pdf --out <out_dir> --no-formulas
-# → figures/ tables/ summary.json
-
-# 2.3 pymupdf4llm 全文（v2 中作为 fallback，主输入不用）
-python3 scripts/extract_pdf_text.py paper.pdf <out_dir>
-# → paper.md (fallback only) + paper_meta.json
-
-# 2.4 ar5iv 基础解析（caption 全文 + fig_id + spacer）
-python3 scripts/parse_ar5iv.py <arxiv_id> <out_dir>
-# → meta.json + figs.json + imgs/
-
-# 2.5 ⭐ parse_ar5iv_extended：结构化正文（★ Phase 3/4 主输入）
-python3 scripts/parse_ar5iv_extended.py <arxiv_id> <out_dir>
-# → paper_sections.json (sections + paragraphs + inline_equations + tables with cells)
-
-# 2.6 ⭐ build_figure_alias：短名映射（★ Phase 6 short name 解析）
-python3 scripts/build_figure_alias.py <out_dir>
-# → figures_alias.json (figure: page007_figure_02.png → fig-03.png, table: page010_table_05.png → tbl-01.png)
-
-# 2.7 ⭐ build_paper_context：共享摘要（★ Phase 4/5 主输入）
-python3 scripts/build_paper_context.py <out_dir>
-# → paper_context.json (29 section gists ≤ 500 char + 27 key numbers + 9 figure entries)
+# 确实需要 UniMERNet 公式识别时：
+paper-preread prepare <arxiv_id> --out <out_dir> --with-formulas
 ```
+
+命令依次生成 paper.pdf、figures/tables/summary.json、paper.md、paper_meta.json、
+meta.json、figs.json、paper_sections.json、figures_alias.json 和 paper_context.json。
 
 **Phase 2 结束检查清单**：
 
@@ -342,15 +316,18 @@ python3 scripts/collect_modules.py <out_dir>    # exit 0 全齐 / exit 1 有缺
 **输入**：6 个全 pass 的 `_modules/<模块>.json` + **figures_alias.json (短名解析 → media-insert)** + figures/tables/
 **输出**：飞书 wiki 子文档 + doc_id
 
-**做法**：
+**做法**：默认先生成计划，不做远端写入；确认后显式加 `--commit`。
 ```bash
 cd <out_dir>    # cwd 必须是这里
-# Phase 6 orchestrator 已经在 phase6_write.py:
-# - 读 _plan.json / _modules/*.json / figures_alias.json
-# - 把 module content_md 里的 `![Figure](figures/fig-03.png)` 解析回 `figures/page007_figure_02.png` 后 media-insert
-# - 把文字 / 图交替 append 到飞书文档
-python3 phase6_write.py --out-dir .
+paper-preread phase6 --out-dir . --parent <wiki-url> --profile auto
+# 检查 phase6_export.json 后执行：
+paper-preread phase6 --out-dir . --parent <wiki-url> --profile auto --commit
 ```
+
+`lark-cli` 缺失时，第一条命令仍会产出完整文字/图片操作清单并标记
+`needs_lark_cli`，不丢失 Phase 3–5 产物。安装飞书 CLI 并授权后，用同一命令续跑。
+`--profile auto` 会对所有 profile 做只读父节点探测；只有一个账户可访问时自动选择，
+多个账户都可访问且无法判定时要求显式传 profile，避免写错账户。
 
 **输出数据**：飞书 doc_id，可去 `lark-cli docs +fetch --doc <doc_id>` 校验。
 
@@ -362,14 +339,8 @@ curl -s "https://api.openalex.org/works?filter=default.search:<phrase>&per_page=
 curl -sL https://ar5iv.labs.arxiv.org/html/<id> | grep -oE '<title>[^<]*</title>'
 curl -sL https://arxiv.org/abs/<id> | grep -oE 'citation_title" content="[^"]*"'
 
-# === Phase 2 内容抓取（v2 7 步） ===
-python3 scripts/download_arxiv_pdf.py <arxiv_id> <out_dir>
-source ~/.config/pdf-extract/config.sh && paper-extract paper.pdf --out <out_dir> --no-formulas
-python3 scripts/extract_pdf_text.py paper.pdf <out_dir>               # fallback only
-python3 scripts/parse_ar5iv.py <arxiv_id> <out_dir>
-python3 scripts/parse_ar5iv_extended.py <arxiv_id> <out_dir>          # ⭐
-python3 scripts/build_figure_alias.py <out_dir>                       # ⭐
-python3 scripts/build_paper_context.py <out_dir>                      # ⭐
+# === Phase 2 内容抓取（v2 7 步，同一持久 runtime） ===
+paper-preread prepare <arxiv_id> --out <out_dir>
 
 # === Phase 3-5 校验 ===
 python3 scripts/build_manifest.py --verify
@@ -380,11 +351,9 @@ python3 scripts/review_loop.py _review_panel.json                      # Phase 5
 # 用 Write 把 dict 写到临时文件，再用 safe_io.write CLI 原子写
 python3 scripts/safe_io.py write <out_dir>/_modules/<模块>.json --from /tmp/<模块>.dict.json
 
-# === Phase 6 飞书 ===
-lark-cli --profile <profile> docs +create --content "@<first.md>" --parent-token <token>
-lark-cli --profile <profile> docs +update --doc <id> --command append --content "@<chunk.md>"
-lark-cli --profile <profile> docs +media-insert --doc <id> --file ./figures/<name>.png --align center --width 720
-lark-cli --profile <profile> docs +fetch --doc <id> --scope keyword --keyword "Table"
+# === Phase 6 飞书（先计划，后提交） ===
+paper-preread phase6 --out-dir . --parent <wiki-url> --profile auto
+paper-preread phase6 --out-dir . --parent <wiki-url> --profile auto --commit
 ```
 
 ## 脚本清单（11 个 + 1 个外置）
@@ -404,7 +373,8 @@ lark-cli --profile <profile> docs +fetch --doc <id> --scope keyword --keyword "T
 | `manifest.json` | 模块清单 + 触发规则 + phase_contracts（**单一事实源**，collect/review 自动读） | 任意阶段 |
 | `scripts/extract_pdf_figures.py` | (fallback) | 仅 pdf-extract 不可用时 |
 | `scripts/extract_table_orig.py` | (fallback) | 仅 pdf-extract 不可用时 |
-| `外置: ~/.claude/skills/pdf-extract/` | paper-extract CLI (figures/ tables/ + progress + GPU optional) | Phase 2.2 |
+| `外置: pdf-extract skill` | paper-extract CLI (figures/ tables/ + progress + GPU optional) | Phase 2.2 |
+| `scripts/phase6_write.py` | 生成/执行可续跑的飞书图文写入计划 | Phase 6 |
 
 ## 踩过的坑
 

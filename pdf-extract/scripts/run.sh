@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # pdf-extract skill wrapper
-# 路径解析：env var → config.sh → 报错
+# 路径解析：env var → persistent runtime → compatibility config → 报错
 set -euo pipefail
 
 PY="${PAPER_EXTRACT_PY:-}"
+if [[ -z "$PY" && -x "${PAPER_PREREAD_HOME:-$HOME/.paper-preread}/venv/bin/python" ]]; then
+    PY="${PAPER_PREREAD_HOME:-$HOME/.paper-preread}/venv/bin/python"
+fi
 if [[ -z "$PY" ]]; then
     CONFIG="$HOME/.config/pdf-extract/config.sh"
     if [[ -f "$CONFIG" ]]; then
@@ -16,6 +19,11 @@ fi
 if [[ -z "$PY" ]]; then
     echo "ERROR: paper-extract 未配置。请先跑：" >&2
     echo "  $(dirname "$0")/setup.sh" >&2
+    exit 1
+fi
+
+if [[ ! -x "$PY" ]]; then
+    echo "ERROR: configured Python runtime is not executable: $PY" >&2
     exit 1
 fi
 

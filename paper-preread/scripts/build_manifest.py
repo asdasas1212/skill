@@ -49,6 +49,8 @@ def build_manifest() -> dict:
                 "paper.md",
                 "paper_meta.json",
                 "paper_sections.json",
+                "paper_context.json",
+                "figures_alias.json",
                 "summary.json",
                 "figures/",
                 "tables/",
@@ -111,7 +113,11 @@ def verify_manifest(skill_dir: Path) -> int:
 
 def main():
     ap = argparse.ArgumentParser(description="build/verify paper-preread manifest.json")
-    ap.add_argument("--skill-dir", default="/Users/huangkaixuan/.claude/skills/paper-preread")
+    ap.add_argument(
+        "--skill-dir",
+        default=str(Path(__file__).resolve().parent.parent),
+        help="skill directory; defaults to the directory containing this script",
+    )
     ap.add_argument("--verify", action="store_true", help="only verify existing manifest")
     args = ap.parse_args()
     skill_dir = Path(args.skill_dir)

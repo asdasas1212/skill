@@ -1,0 +1,4 @@
+.git/
+paper-preread/SKILL.md.v1.bak
+**/__pycache__/
+**/*.pyc

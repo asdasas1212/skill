@@ -1,0 +1,32 @@
+{
+  "name": "paper-preread-cli",
+  "version": "0.1.0",
+  "description": "One-command installer and runtime manager for the paper-preread Codex skills",
+  "type": "module",
+  "bin": {
+    "paper-preread": "bin/paper-preread.mjs"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "paper-preread/SKILL.md",
+    "paper-preread/manifest.json",
+    "paper-preread/scripts/*.py",
+    "pdf-extract/SKILL.md",
+    "pdf-extract/pyproject.toml",
+    "pdf-extract/scripts/*.sh",
+    "pdf-extract/src/**/*.py"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "pack:check": "npm pack --dry-run"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asdasas1212/skill.git"
+  },
+  "license": "UNLICENSED"
+}

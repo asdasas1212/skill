@@ -1,6 +1,17 @@
-# skill
+# paper-preread CLI + skills
 
-个人 Claude Agent skills 仓库。包含两个互相配套的 paper 精读工作流 skill：
+论文精读运行时与两个互相配套的 Agent skills。支持从 GitHub 直接一条命令安装：
+
+只需要 Node.js 18 或更高版本，不要求用户预装 Python、pip、Conda、Homebrew 或 uv。
+
+```bash
+npx github:asdasas1212/skill install
+~/.local/bin/paper-preread doctor
+```
+
+安装器会自行下载独立的 `uv` 和 Python 3.10，然后安装全部 Python 包及模型。运行时、
+Python 依赖和模型持久化在 `~/.paper-preread/`，重复安装或升级 skill
+不会重新创建环境；模型文件存在时不会重复下载。
 
 ## 目录
 
@@ -29,11 +40,16 @@
 ## 安装（首次使用）
 
 ```bash
-# pdf-extract 需要首次 setup 下载模型（5-10 min）
-bash pdf-extract/scripts/setup.sh
-source ~/.config/pdf-extract/config.sh
+npx github:asdasas1212/skill install
+```
 
-# paper-preread 无额外安装（依赖系统 python3 + pymupdf + lark-cli）
+开发仓库本地验证可用 `node ./bin/paper-preread.mjs doctor`。跳过首次模型下载可加
+`--skip-models`；第一次抽取时仍会按需下载并缓存。
+
+安装完成后，Phase 2 的七个确定性步骤由同一个命令完成，全部使用持久 runtime：
+
+```bash
+paper-preread prepare 2501.00001 --out ./paper-output
 ```
 
 ## 使用示例（精读一篇论文）
@@ -47,6 +63,16 @@ PARENT_TOKEN=<你的飞书 wiki 父节点 token>
 # 产出：每个论文一个飞书子文档，含 6 模块精读 + 与用户 5 agent 设计的映射
 ```
 
+Phase 6 默认只生成 `phase6_export.json`，不会写远端：
+
+```bash
+paper-preread phase6 --out-dir ./paper-output --parent "$PARENT_TOKEN" --profile auto
+paper-preread phase6 --out-dir ./paper-output --parent "$PARENT_TOKEN" --profile auto --commit
+```
+
+未安装 `lark-cli` 时计划仍会保留并标记 `needs_lark_cli`。之后安装并完成授权，
+重复同一条 `--commit` 命令即可继续。
+
 实测性能（v2）：单篇论文 ~30 min 端到端（vs v1 ~85 min）。
 
 ## 版本
@@ -58,8 +84,7 @@ PARENT_TOKEN=<你的飞书 wiki 父节点 token>
 
 ## 配套工具（非本仓库但常组合用）
 
-- `md2feishu.py` — markdown → 飞书 XML 转换器（位于 `~/.claude/work/<project>/`）
-- `phase6_write_v2.py` — paper-preread Phase 6 的 markdown→XML+图文混排 orchestrator
+- `lark-cli` — 可选；用于 Phase 6 直接写飞书。未安装时先生成可续跑导出计划。
 
 ## License
 
