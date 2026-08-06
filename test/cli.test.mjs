@@ -12,7 +12,7 @@ const cli = path.join(root, "bin", "paper-preread.mjs");
 test("CLI reports version", () => {
   const result = spawnSync(process.execPath, [cli, "version"], { encoding: "utf8" });
   assert.equal(result.status, 0);
-  assert.equal(result.stdout.trim(), "0.1.0");
+  assert.equal(result.stdout.trim(), "0.1.1");
 });
 
 test("CLI help documents safe Phase 6", () => {

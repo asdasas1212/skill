@@ -50,10 +50,11 @@ def _download(key: str) -> Path:
     rel_path = _PATTERNS[key]
     CACHE_ROOT.mkdir(parents=True, exist_ok=True)
     (CACHE_ROOT / 'models').mkdir(parents=True, exist_ok=True)
+    model_path = f'models/{rel_path}'
     snapshot_download(
         repo_id=HF_REPO,
-        local_dir=str(CACHE_ROOT / 'models'),
-        allow_patterns=[f'models/{rel_path}'],
+        local_dir=str(CACHE_ROOT),
+        allow_patterns=[model_path, f'{model_path}/*'],
     )
     return CACHE_ROOT / 'models' / rel_path
 

@@ -1,6 +1,6 @@
 {
   "name": "paper-preread-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "One-command installer and runtime manager for the paper-preread Codex skills",
   "type": "module",
   "bin": {
