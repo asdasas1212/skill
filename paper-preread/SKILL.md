@@ -52,7 +52,7 @@ description: 论文精读 + 飞书 wiki 子文档生成 skill（v2）— 从 arx
 
 ## 环境依赖
 
-- **paper-preread CLI runtime**：首次运行 `npx github:asdasas1212/skill install`；发布 npm 后可改用 `npx paper-preread-cli install`。安装器自动准备独立的 uv、Python 3.10、Python 包和模型，用户不需要手工配置 Python。运行时与模型持久化在 `~/.paper-preread/`，skill 更新不会重复安装
+- **paper-preread CLI runtime**：首次运行 `npm install -g paper-preread-cli && paper-preread install`。安装器自动准备独立的 uv、Python 3.10、Python 包和模型，用户不需要手工配置 Python。运行时与模型持久化在 `~/.paper-preread/`，skill 更新不会重复安装
 - **Python runtime**：由安装器统一管理 PyMuPDF、pymupdf4llm 与 PDF 抽取依赖；不要要求用户安装 Conda、虚拟环境或混用系统 Python
 - **lark-cli（可选）**：Phase 6 直接写飞书时使用；缺失时生成 `phase6_export.json`，后续安装后续跑
 

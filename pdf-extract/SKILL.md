@@ -12,13 +12,14 @@ description: 从文献 PDF 抽取 figures / tables / captions / formulas + LaTeX
 ## 安装（新机器一次性，后续复用）
 
 ```bash
-npx github:asdasas1212/skill install
+npm install -g paper-preread-cli
+paper-preread install
 ```
 
 安装器把可复用运行时放在 `~/.paper-preread/`，把模型放在
 `~/.paper-preread/models/`。重复安装 skill 只同步变化，不重建环境或重复下载模型。
 独立的 uv、Python 3.10、Python 包和模型均由这条命令自动准备，不要求用户预装或理解 Python 环境。
-未发布 npm 包或从源码运行时，执行本 skill 的 `scripts/setup.sh`，效果相同。
+从源码运行时，执行本 skill 的 `scripts/setup.sh`，效果相同。
 
 ## 调用
 

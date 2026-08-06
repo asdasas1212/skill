@@ -1,12 +1,13 @@
 # paper-preread CLI + skills
 
-论文精读运行时与两个互相配套的 Agent skills。支持从 GitHub 直接一条命令安装：
+论文精读运行时与两个互相配套的 Agent skills。通过 npm 安装 CLI：
 
 只需要 Node.js 18 或更高版本，不要求用户预装 Python、pip、Conda、Homebrew 或 uv。
 
 ```bash
-npx github:asdasas1212/skill install
-~/.local/bin/paper-preread doctor
+npm install -g paper-preread-cli
+paper-preread install
+paper-preread doctor
 ```
 
 安装器会自行下载独立的 `uv` 和 Python 3.10，然后安装全部 Python 包及模型。运行时、
@@ -40,7 +41,8 @@ Python 依赖和模型持久化在 `~/.paper-preread/`，重复安装或升级 s
 ## 安装（首次使用）
 
 ```bash
-npx github:asdasas1212/skill install
+npm install -g paper-preread-cli
+paper-preread install
 ```
 
 开发仓库本地验证可用 `node ./bin/paper-preread.mjs doctor`。跳过首次模型下载可加
