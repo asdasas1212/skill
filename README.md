@@ -1,6 +1,6 @@
 # paper-preread CLI + skills
 
-论文精读运行时与两个互相配套的 Agent skills。通过 npm 安装 CLI：
+论文精读运行时与个人 Agent skills。通过 npm 安装论文 CLI：
 
 只需要 Node.js 18 或更高版本，不要求用户预装 Python、pip、Conda、Homebrew 或 uv。
 
@@ -37,6 +37,28 @@ Python 依赖和模型持久化在 `~/.paper-preread/`，重复安装或升级 s
 主入口：[`pdf-extract/SKILL.md`](./pdf-extract/SKILL.md)
 关键脚本：`pdf-extract/scripts/run.sh`（调用入口）、`pdf-extract/scripts/setup.sh`（首次安装 + 模型下载）
 底层包：`pdf-extract/src/paper_extract/`（doclayout-yolo + ultralytics + paddleocr + unimernet）
+
+### [`codex-session-migrate/`](./codex-session-migrate/) — Codex 跨机器会话迁移
+
+迁移 Codex 会话历史、上传附件与指定工作文件，支持非 Git 工作目录的手动导入。
+包含迁移流程、分页历史与 provider 差异排查、一次脱敏实测记录，以及文件打包校验和
+app-server RPC 辅助脚本。此 skill 使用 Python 3 标准库，无需安装上述论文运行时。
+
+主入口：[`codex-session-migrate/SKILL.md`](./codex-session-migrate/SKILL.md)。
+调用示例：`使用 $codex-session-migrate，等源会话运行完成后，将它及生成文件迁移到目标机器。`
+
+安装到本机 Codex 技能目录（从仓库根目录执行，目标不存在时）：
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R codex-session-migrate ~/.codex/skills/codex-session-migrate
+```
+
+该 skill 不随 `paper-preread-cli` 的安装器安装。辅助脚本验证：
+
+```bash
+python3 -m unittest discover -s codex-session-migrate/tests -v
+```
 
 ## 安装（首次使用）
 
@@ -83,6 +105,7 @@ paper-preread phase6 --out-dir ./paper-output --parent "$PARENT_TOKEN" --profile
 |---|---|---|
 | paper-preread | v2 (2026-08) | 7 步 Phase 2 + paper_sections.json 主输入 + safe_io 原子写 + panel-of-4 review |
 | pdf-extract | v1 | doclayout-yolo + ultralytics + paddleocr + unimernet 流水线 |
+| codex-session-migrate | 2026-11-19 | 跨主机会话历史与文件迁移、完整性校验及实测记录 |
 
 ## 配套工具（非本仓库但常组合用）
 
