@@ -71,6 +71,8 @@ python3 scripts/file_bundle.py rewrite \
 
 `rewrite` 是按最长旧路径优先的一次文本替换，不会再次处理新写入的目标路径。它会修改副本中所有匹配文本，包括历史命令和输出；因此保留原始字节和映射作为审计依据。必要时对指定 Markdown 文档做同样处理，完成后另外校验这些有意变化的文件。
 
+若 session_meta 含 `history_base`，当前 rollout 只保存 fork 后的新增历史。递归带上祖先 rollout，保持原 ID 和 ordinal，不复制整个历史数据库。子记录中的 `end_byte_offset` 指向祖先原始字节边界：祖先路径重写会改变字节数，须将**原边界之前的前缀**单独重写并按 UTF-8 字节重新计算边界；不要一律写祖先当前文件长度，因为祖先可能在 fork 后继续工作。`end_ordinal_exclusive` 保持原逻辑边界。本次实测祖先没有后续内容，边界恰好为全文件长度。
+
 在目标 Codex home 中恢复附件原相对目录，可保留绝对路径使图片解析。已有路径哈希不同则使用隔离的新目录并加入映射；不能覆盖。图片的 data URL 已在历史内不代表本地 `view_image` 引用也有效。
 
 ## 4. 先确认当前协议与 provider
@@ -120,6 +122,8 @@ python3 scripts/codex_rpc.py call \
 
 helper 默认新建 `codex app-server --stdio` 连接，退出只结束该子进程，不结束桌面端的其他会话。若目标部署不支持独立 stdio，改用该版本明确文档化的连接方式。实测 `app-server proxy` 的 initialize 曾超时，不能把等待误判为登录失效，也不能改写 daemon 文件解决。
 
+若 `thread/read` 与 `thread/turns/list` 均返回空历史，但 rollout 确实包含 `task_started` / `item_completed` 等事件，先检查投影是否尚未建立。本次目标版本需对**仅本次导入的临时副本**依次 `thread/resume` 祖先、再 resume 子线程，才把持久化事件建立为可分页历史；不发 `turn/start`。随后必须重读全部分页并与源导出比较，通过后才能 fork。不要把空数组当作可验证的成功结果。
+
 请求超时或断开后禁止直接重试 fork：先 `thread/list` / `thread/read` 检查是否已经生成目标 ID。每个变更请求都记录结果；不做无限重试。
 
 ## 6. 验证历史与可见性
@@ -140,9 +144,13 @@ python3 scripts/codex_rpc.py compare \
 
 helper 比较的是轮 ID、status 和每轮条目 ID/type，不宣称正文每字节一致；有意重映射的路径会改变文本。额外抽查最早和最新消息、最终回复、工具输出与图片。paginated fork 可能将历史存入规范历史存储，新的 rollout 文件只有少量控制记录；不能只数目标 JSONL 的 `response_item` 就判断历史为空。
 
+可进一步递归比较每轮完整 JSON：先仅应用已记录的路径映射，再排除已证实的协议字段差异。本次源端每轮 `rootTurnId == id`，目标旧版本省略 `rootTurnId`；验证该等价关系后可忽略此字段，其他正文、附件和工具内容仍须一致。
+
 较早轮次可以处于 `interrupted` 或 `failed`，迁移时应原样保留；不能为了让校验通过而删除。helper 接受这些已结束状态并逐一比较，拒绝 `inProgress`。本次快照开始前，最新轮仍须满足用户要求的完成条件。
 
 最后用桌面工具 `list_threads` 指定目标 host、`read_thread` 指定新 ID 验证可见性。若 `move_thread_to_project` 报 sidebar 不可用，可先 `set_thread_title` / 刷新列表触发加载后再试一次；“source project could not be safely determined” 则说明历史导入未建立项目归属，保留可用聊天并如实记录，不直接编辑全局 UI JSON 或 SQLite。
+
+本次旧目标版本的 paginated fork 只写 history_base，`thread/list` 会因空的本地用户预览过滤它，尽管按 ID 读历史完全正常。可在需要直接可见入口时置顶该迁移会话，并用 recent `list_threads` 的 pinnedThreads 验证，再如实说明项目归属限制；置顶不等于项目归属已修复。不要复制用户消息伪造新一轮，也不要为刷新列表启动推理。若为了诊断产生额外目标 fork，最终验证后仅归档本次目标临时线程。
 
 ## 错误定位
 
