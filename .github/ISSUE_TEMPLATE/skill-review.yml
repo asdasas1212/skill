@@ -1,0 +1,23 @@
+name: Skill 审阅与改进
+description: 指出不合理的步骤、事实问题、权限问题，或分享实测与改进建议。
+title: "[Review] "
+body:
+  - type: input
+    id: target
+    attributes:
+      label: Skill 与具体位置
+      description: 写出 skill 名称、文件路径或对应步骤。
+    validations:
+      required: true
+  - type: textarea
+    id: finding
+    attributes:
+      label: 发现了什么？
+      description: 哪个假设、指令、权限或结果值得修改？请给出具体依据。
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: 建议与验证
+      description: 你建议怎样修改？有没有实测结果、参考文档或替代做法？

@@ -1,0 +1,36 @@
+name: 问题报告 / Bug report
+description: 报告运行失败、说明错误或与预期不一致的结果。
+title: "[Bug] "
+body:
+  - type: dropdown
+    id: skill
+    attributes:
+      label: 哪个 Skill？
+      options:
+        - paper-preread
+        - pdf-extract
+        - codex-session-migrate
+        - perception-web-motion
+        - 论文 CLI / 安装器
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: 任务与复现步骤
+      description: 你想完成什么？按什么步骤可以看到问题？
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 预期结果与实际结果
+      description: 可附脱敏后的日志或截图；请移除凭据、私人文档链接和业务数据。
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 使用环境
+      description: 操作系统、Agent 与相关工具版本、仓库 commit 或 skill 版本。

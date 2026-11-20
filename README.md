@@ -1,6 +1,54 @@
-# paper-preread CLI + skills
+# 工作与学习中的 Agent Skills
 
-论文精读运行时与个人 Agent skills。通过 npm 安装论文 CLI：
+这里收集了我在日常工作和学习中逐步整理的一些 Agent Skills：论文精读、PDF 内容抽取、
+跨机器继续 Codex 会话，以及科技展示网页的设计与动效实现。
+
+这些 skill 来自实际使用中的尝试、踩坑和复盘。我会边用边改，也希望公开后接受大家监督：
+如果你发现步骤不合理、事实不准确、依赖已经过时、权限范围过大，或者结果不符合说明，
+欢迎直接提 [Issue](https://github.com/asdasas1212/skill/issues/new/choose) 或
+[Pull Request](https://github.com/asdasas1212/skill/pulls)。能提供具体任务、复现步骤和实际结果，会很有帮助。
+
+Personal Agent Skills from my everyday work and study. Feedback, reproducible bug reports,
+and improvements are welcome.
+
+| Skill | 用途 | 使用说明 |
+| --- | --- | --- |
+| `paper-preread` | 从 arXiv 论文到结构化精读与飞书文档 | [SKILL.md](./paper-preread/SKILL.md) |
+| `pdf-extract` | 抽取 PDF 图、表、公式与说明 | [SKILL.md](./pdf-extract/SKILL.md) |
+| `codex-session-migrate` | 迁移 Codex 会话历史、附件与工作文件 | [SKILL.md](./codex-session-migrate/SKILL.md) |
+| `perception-web-motion` | 科技展示网页、同步动效与 GitHub README 适配 | [SKILL.md](./perception-web-motion/SKILL.md) |
+
+## 安装 Agent Skill
+
+Skills CLI 需要 Node.js 22.20 或更高版本。查看并选择技能：
+
+```bash
+npx skills add asdasas1212/skill --full-depth
+```
+
+只安装网页动效 skill 到 Codex：
+
+```bash
+npx skills add asdasas1212/skill --skill perception-web-motion --agent codex --full-depth
+```
+
+也可以把对应 skill 目录复制到你所用 Agent 的技能目录。安装说明与调用条件以各自的
+`SKILL.md` 为准；论文抽取的运行依赖还需按下方 CLI 说明准备。
+
+## 欢迎监督与改进
+
+- **报告问题**：说明使用哪个 skill、做什么任务、在哪一步出现了什么偏差。
+- **审阅方法**：欢迎指出流程中的多余步骤、缺少的验证、错误假设和过大的操作权限。
+- **分享实测**：给出使用环境、工具版本、输入类型和结果，帮助确认适用范围。
+- **提交修改**：小范围修改更方便核对；修改脚本时附上相关验证结果。
+
+反馈入口：[新建 Issue](https://github.com/asdasas1212/skill/issues/new/choose) ·
+[贡献说明](./CONTRIBUTING.md)。
+实测记录描述的是当时环境中的结果，具体能力和耗时仍需在你的任务中验证。
+
+## 论文 CLI 与运行依赖
+
+`paper-preread` 与 `pdf-extract` 使用配套的论文 CLI。通过 npm 安装：
 
 只需要 Node.js 18 或更高版本，不要求用户预装 Python、pip、Conda、Homebrew 或 uv。
 
@@ -136,6 +184,7 @@ paper-preread phase6 --out-dir ./paper-output --parent "$PARENT_TOKEN" --profile
 
 - `lark-cli` — 可选；用于 Phase 6 直接写飞书。未安装时先生成可续跑导出计划。
 
-## License
+## 许可状态
 
-Private repo.
+当前 `package.json` 保留 `UNLICENSED` 声明，尚未指定统一的开源许可证。
+第三方依赖、模型权重和参考素材保留各自的许可与署名要求。
