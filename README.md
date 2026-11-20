@@ -60,6 +60,30 @@ cp -R codex-session-migrate ~/.codex/skills/codex-session-migrate
 python3 -m unittest discover -s codex-session-migrate/tests -v
 ```
 
+### [`perception-web-motion/`](./perception-web-motion/) — 科技展示网页与同步动效
+
+依据 Tencent WeVisOne-VL 项目页的源码拆解，制作暗色柔光、Canvas 几何、渐变标题、
+滚动显现，以及 token 输出与框 / 点 / 蒙版同步出现的展示网页。
+包含逐项源码证据、通用实现配方、GitHub README 自动播放适配，以及无外部依赖的原创示例。
+
+主入口：[`perception-web-motion/SKILL.md`](./perception-web-motion/SKILL.md)。
+调用示例：`使用 $perception-web-motion，把我的项目做成 WeVisOne-VL 风格的科技展示网页。`
+
+本机安装（从仓库根目录执行，目标不存在时）：
+
+```bash
+mkdir -p ~/.codex/skills
+cp -R perception-web-motion ~/.codex/skills/perception-web-motion
+```
+
+此 skill 不随论文 CLI 安装。预览原创示例：
+
+```bash
+python3 -m http.server 8080 --directory perception-web-motion/assets/starter
+```
+
+浏览器打开 `http://localhost:8080`。示例为预设数据回放，没有连接模型。
+
 ## 安装（首次使用）
 
 ```bash
@@ -106,6 +130,7 @@ paper-preread phase6 --out-dir ./paper-output --parent "$PARENT_TOKEN" --profile
 | paper-preread | v2 (2026-08) | 7 步 Phase 2 + paper_sections.json 主输入 + safe_io 原子写 + panel-of-4 review |
 | pdf-extract | v1 | doclayout-yolo + ultralytics + paddleocr + unimernet 流水线 |
 | codex-session-migrate | 2026-11-19 | 跨主机会话历史与文件迁移、完整性校验及实测记录 |
+| perception-web-motion | 2026-11-20 | WeVisOne-VL 源码拆解、同步演示机制、原创网页起点与 README 适配 |
 
 ## 配套工具（非本仓库但常组合用）
 
